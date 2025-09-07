@@ -66,26 +66,24 @@
 let mediaRecorder;
 let recordedChunks = [];
 let finalStream;
-let displayStream;
-let micStream;
+let isRecording = false;
 
 async function startRecording() {
+  if (isRecording) return;
+  isRecording = true;
+
   const [w, h] = document.getElementById("resolution").value.split("x").map(Number);
   const fps = parseInt(document.getElementById("fps").value);
   const withMic = document.getElementById("withMic").checked;
 
   try {
-    displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width: w, height: h, frameRate: fps },
-      audio: true // بعض المتصفحات تدعم صوت النظام
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: w, height: h, frameRate: fps }
     });
 
     if (withMic) {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      finalStream = new MediaStream([
-        ...displayStream.getVideoTracks(),
-        ...micStream.getAudioTracks()
-      ]);
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      finalStream = new MediaStream([...displayStream.getVideoTracks(), ...micStream.getAudioTracks()]);
     } else {
       finalStream = displayStream;
     }
@@ -95,41 +93,43 @@ async function startRecording() {
     mediaRecorder = new MediaRecorder(finalStream, {
       mimeType: "video/webm;codecs=vp9",
       videoBitsPerSecond: 8000000,
-      audioBitsPerSecond: 256000
+      audioBitsPerSecond: 320000
     });
 
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-
+    mediaRecorder.ondataavailable = e => { if(e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = saveRecording;
 
-    // مراقبة إيقاف مشاركة الشاشة من المتصفح
-    displayStream.getVideoTracks()[0].addEventListener("ended", stopRecording);
-    
+    // مراقبة كل التراكات
+    finalStream.getTracks().forEach(track => {
+      track.addEventListener("ended", () => {
+        if (isRecording) stopRecording();
+      });
+      track.addEventListener("inactive", () => {
+        if (isRecording) stopRecording();
+      });
+    });
+
     mediaRecorder.start();
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
-  } catch (err) {
+
+  } catch(err) {
     alert("فشل البدء: " + err.message);
+    isRecording = false;
   }
 }
 
 function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
-  }
+  if (!isRecording) return;
+  isRecording = false;
 
-  // إيقاف جميع التراكات
-  if (displayStream) displayStream.getTracks().forEach(track => track.stop());
-  if (micStream) micStream.getTracks().forEach(track => track.stop());
+  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
 
   document.getElementById("startBtn").disabled = false;
   document.getElementById("stopBtn").disabled = true;
 }
 
 async function saveRecording() {
-  if (recordedChunks.length === 0) return;
   const blob = new Blob(recordedChunks, { type: "video/webm" });
   recordedChunks = [];
 
@@ -142,7 +142,7 @@ async function saveRecording() {
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
-    } catch (err) {
+    } catch(err) {
       console.log("تم إلغاء الحفظ", err);
     }
   } else {
@@ -157,8 +157,10 @@ async function saveRecording() {
 document.getElementById("startBtn").onclick = startRecording;
 document.getElementById("stopBtn").onclick = stopRecording;
 </script>
+
 </body>
 </html>
+
 
 
 

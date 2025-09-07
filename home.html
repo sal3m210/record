@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>مسجل الشاشة</title>
+  <style>
+    body { text-align: center; font-family: Arial; margin-top: 30px; }
+    select, button { padding: 10px; margin: 10px; font-size: 16px; }
+    video { margin-top: 20px; max-width: 80%; border: 1px solid #000; }
+  </style>
+</head>
+<body>
+  <h2>📹 مسجل الشاشة </h2>
+
+  <label>الدقة:</label>
+  <select id="resolution">
+    <option value="1280x720">720p (HD)</option>
+    <option value="1920x1080" selected>1080p (Full HD)</option>
+    <option value="3840x2160">2160p (4K)</option>
+  </select>
+
+  <label>الفريمات:</label>
+  <select id="fps">
+    <option value="30" selected>30 FPS</option>
+    <option value="60">60 FPS</option>
+  </select>
+  <br>
+
+  <button id="startBtn">بدء التسجيل</button>
+  <button id="stopBtn" disabled>إيقاف التسجيل</button>
+
+  <br><br>
+  <video id="preview" controls autoplay></video>
+
+  <script>
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    document.getElementById("startBtn").onclick = async () => {
+      const resolution = document.getElementById("resolution").value.split("x");
+      const fps = parseInt(document.getElementById("fps").value);
+
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: parseInt(resolution[0]),
+          height: parseInt(resolution[1]),
+          frameRate: fps
+        },
+        audio: true
+      });
+
+      document.getElementById("preview").srcObject = stream;
+
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "video/webm;codecs=vp9",
+        videoBitsPerSecond: 8000000,  // 8 Mbps جودة عالية
+        audioBitsPerSecond: 128000
+      });
+
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "تسجيل_الشاشة.webm";
+        a.click();
+        recordedChunks = [];
+      };
+
+      mediaRecorder.start();
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    };
+
+    document.getElementById("stopBtn").onclick = () => {
+      mediaRecorder.stop();
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    };
+  </script>
+</body>
+</html>

@@ -20,14 +20,8 @@
       text-align: center;
       width: 400px;
     }
-    h2 {
-      margin-bottom: 20px;
-    }
-    .controls {
-      display: grid;
-      gap: 15px;
-      margin-bottom: 20px;
-    }
+    h2 { margin-bottom: 20px; }
+    .controls { display: grid; gap: 15px; margin-bottom: 20px; }
     select, button, label {
       padding: 10px;
       font-size: 15px;
@@ -35,28 +29,11 @@
       border: 1px solid #ccc;
       width: 100%;
     }
-    button {
-      cursor: pointer;
-      background: #007bff;
-      color: #fff;
-      border: none;
-      transition: 0.3s;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    #stopBtn {
-      background: #dc3545;
-    }
-    #stopBtn:hover {
-      background: #a71d2a;
-    }
-    video {
-      margin-top: 15px;
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid #ddd;
-    }
+    button { cursor: pointer; background: #007bff; color: #fff; border: none; transition: 0.3s; }
+    button:hover { background: #0056b3; }
+    #stopBtn { background: #dc3545; }
+    #stopBtn:hover { background: #a71d2a; }
+    video { margin-top: 15px; width: 100%; border-radius: 10px; border: 1px solid #ddd; }
   </style>
 </head>
 <body>
@@ -95,30 +72,32 @@
       const fps = parseInt(document.getElementById("fps").value);
       const withMic = document.getElementById("withMic").checked;
 
-      // 🎥 تسجيل الشاشة (فيديو + صوت النظام لو متاح)
+      // 🎥 شاشة بدون صوت (بعض المتصفحات ما تسمح بصوت النظام)
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: w, height: h, frameRate: fps },
-        audio: true
+        video: { width: w, height: h, frameRate: fps }
       });
 
       let finalStream = displayStream;
 
-      // 🎤 لو المايك مطلوب → نضيفه
       if (withMic) {
+        // 🎤 صوت المايك
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // AudioContext للدمج
         const audioContext = new AudioContext();
         const destination = audioContext.createMediaStreamDestination();
-
-        // ربط صوت الشاشة (إن وجد)
-        if (displayStream.getAudioTracks().length > 0) {
-          const displayAudio = audioContext.createMediaStreamSource(displayStream);
-          displayAudio.connect(destination);
-        }
 
         // ربط صوت المايك
         const micAudio = audioContext.createMediaStreamSource(micStream);
         micAudio.connect(destination);
 
+        // ربط صوت الشاشة (لو فيه صوت متاح)
+        if (displayStream.getAudioTracks().length > 0) {
+          const displayAudio = audioContext.createMediaStreamSource(displayStream);
+          displayAudio.connect(destination);
+        }
+
+        // فيديو + صوت مدموج
         finalStream = new MediaStream([
           ...displayStream.getVideoTracks(),
           ...destination.stream.getAudioTracks()
@@ -127,11 +106,10 @@
 
       document.getElementById("preview").srcObject = finalStream;
 
-      // 🏆 جودة عالية للفيديو + الصوت
       mediaRecorder = new MediaRecorder(finalStream, {
         mimeType: "video/webm;codecs=vp9",
-        videoBitsPerSecond: 8000000,   // 8 Mbps للفيديو
-        audioBitsPerSecond: 320000     // 320kbps للصوت (جودة ممتازة)
+        videoBitsPerSecond: 8000000,
+        audioBitsPerSecond: 320000  // صوت بجودة عالية
       });
 
       mediaRecorder.ondataavailable = e => {
@@ -141,15 +119,11 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedChunks, { type: "video/webm" });
 
-        // 📝 حفظ الملف (Save As)
         if (window.showSaveFilePicker) {
           try {
             const handle = await window.showSaveFilePicker({
               suggestedName: "تسجيل_الشاشة.webm",
-              types: [{
-                description: "WebM Video",
-                accept: { "video/webm": [".webm"] }
-              }]
+              types: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }]
             });
             const writable = await handle.createWritable();
             await writable.write(blob);
@@ -181,6 +155,7 @@
   </script>
 </body>
 </html>
+
 
 
 

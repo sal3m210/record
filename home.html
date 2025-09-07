@@ -99,14 +99,9 @@ async function startRecording() {
     mediaRecorder.ondataavailable = e => { if(e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = saveRecording;
 
-    // مراقبة كل التراكات
     finalStream.getTracks().forEach(track => {
-      track.addEventListener("ended", () => {
-        if (isRecording) stopRecording();
-      });
-      track.addEventListener("inactive", () => {
-        if (isRecording) stopRecording();
-      });
+      track.addEventListener("ended", () => { if (isRecording) stopRecording(); });
+      track.addEventListener("inactive", () => { if (isRecording) stopRecording(); });
     });
 
     mediaRecorder.start();
@@ -129,37 +124,26 @@ function stopRecording() {
   document.getElementById("stopBtn").disabled = true;
 }
 
-async function saveRecording() {
+function saveRecording() {
   const blob = new Blob(recordedChunks, { type: "video/webm" });
   recordedChunks = [];
 
-  if (window.showSaveFilePicker) {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: "تسجيل_الشاشة.webm",
-        types: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-    } catch(err) {
-      console.log("تم إلغاء الحفظ", err);
-    }
-  } else {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "تسجيل_الشاشة.webm";
-    a.click();
-  }
+  // تحميل مباشر بدون طلب مكان الحفظ
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "تسجيل_الشاشة.webm";
+  a.click();
 }
 
 document.getElementById("startBtn").onclick = startRecording;
 document.getElementById("stopBtn").onclick = stopRecording;
 </script>
 
+
 </body>
 </html>
+
 
 
 

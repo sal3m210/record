@@ -5,12 +5,12 @@
   <title>مسجل الشاشة</title>
   <style>
     body { text-align: center; font-family: Arial; margin-top: 30px; }
-    select, button { padding: 10px; margin: 10px; font-size: 16px; }
+    select, button, label { padding: 10px; margin: 10px; font-size: 16px; }
     video { margin-top: 20px; max-width: 80%; border: 1px solid #000; }
   </style>
 </head>
 <body>
-  <h2>📹 مسجل الشاشة </h2>
+  <h2>📹 مسجل الشاشة (بسيط مثل OBS)</h2>
 
   <label>الدقة:</label>
   <select id="resolution">
@@ -24,6 +24,13 @@
     <option value="30" selected>30 FPS</option>
     <option value="60">60 FPS</option>
   </select>
+
+  <br>
+
+  <label>
+    <input type="checkbox" id="withMic"> 🎤 تسجيل مع المايكروفون
+  </label>
+
   <br>
 
   <button id="startBtn">بدء التسجيل</button>
@@ -39,35 +46,78 @@
     document.getElementById("startBtn").onclick = async () => {
       const resolution = document.getElementById("resolution").value.split("x");
       const fps = parseInt(document.getElementById("fps").value);
+      const withMic = document.getElementById("withMic").checked;
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      // 🎥 تسجيل الشاشة
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: parseInt(resolution[0]),
           height: parseInt(resolution[1]),
           frameRate: fps
         },
-        audio: true
+        audio: true // صوت النظام (إن وُجد)
       });
 
-      document.getElementById("preview").srcObject = stream;
+      // 🎤 إضافة المايكروفون إذا تم اختياره
+      let finalStream = displayStream;
+      if (withMic) {
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioContext = new AudioContext();
+        const dest = audioContext.createMediaStreamDestination();
 
-      mediaRecorder = new MediaRecorder(stream, {
+        // مزج صوت الشاشة + المايك
+        const displayAudio = audioContext.createMediaStreamSource(displayStream);
+        const micAudio = audioContext.createMediaStreamSource(micStream);
+
+        displayAudio.connect(dest);
+        micAudio.connect(dest);
+
+        finalStream = new MediaStream([
+          ...displayStream.getVideoTracks(),
+          ...dest.stream.getAudioTracks()
+        ]);
+      }
+
+      document.getElementById("preview").srcObject = finalStream;
+
+      // 🏆 جودة عالية للفيديو + الصوت
+      mediaRecorder = new MediaRecorder(finalStream, {
         mimeType: "video/webm;codecs=vp9",
-        videoBitsPerSecond: 8000000,  // 8 Mbps جودة عالية
-        audioBitsPerSecond: 128000
+        videoBitsPerSecond: 8000000,   // 8 Mbps
+        audioBitsPerSecond: 256000     // صوت عالي الجودة (256kbps)
       });
 
       mediaRecorder.ondataavailable = e => {
         if (e.data.size > 0) recordedChunks.push(e.data);
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedChunks, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "تسجيل_الشاشة.webm";
-        a.click();
+
+        // يسألك وين تحفظ الملف
+        if (window.showSaveFilePicker) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: "تسجيل_الشاشة.webm",
+              types: [{
+                description: "WebM Video",
+                accept: { "video/webm": [".webm"] }
+              }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+          } catch (err) {
+            console.log("تم إلغاء الحفظ", err);
+          }
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "تسجيل_الشاشة.webm";
+          a.click();
+        }
+
         recordedChunks = [];
       };
 
@@ -84,3 +134,5 @@
   </script>
 </body>
 </html>
+
+

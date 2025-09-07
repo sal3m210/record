@@ -1,131 +1,165 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-  <meta charset="UTF-8">
-  <title>مسجل الشاشة</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
-    .container { background: #fff; padding: 20px 30px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); text-align: center; width: 420px; }
-    h2 { margin-bottom: 20px; }
-    .controls { display: grid; gap: 15px; margin-bottom: 20px; }
-    select, button, label { padding: 10px; font-size: 15px; border-radius: 8px; border: 1px solid #ccc; width: 100%; }
-    button { cursor: pointer; background: #007bff; color: #fff; border: none; transition: 0.3s; }
-    button:hover { background: #0056b3; }
-    #stopBtn { background: #dc3545; }
-    #stopBtn:hover { background: #a71d2a; }
-    video { margin-top: 15px; width: 100%; border-radius: 10px; border: 1px solid #ddd; }
-  </style>
+<meta charset="UTF-8">
+<title>مسجل الشاشة</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  .container {
+    background: #fff;
+    padding: 20px 30px;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    text-align: center;
+    width: 420px;
+  }
+  h2 { margin-bottom: 20px; }
+  .controls { display: grid; gap: 15px; margin-bottom: 20px; }
+  select, button, label {
+    padding: 10px;
+    font-size: 15px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    width: 100%;
+  }
+  button { cursor: pointer; background: #007bff; color: #fff; border: none; transition: 0.3s; }
+  button:hover { background: #0056b3; }
+  #stopBtn { background: #dc3545; }
+  #stopBtn:hover { background: #a71d2a; }
+  video { margin-top: 15px; width: 100%; border-radius: 10px; border: 1px solid #ddd; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h2>📹 مسجل الشاشة</h2>
-    <div class="controls">
-      <select id="resolution">
-        <option value="1280x720">720p (HD)</option>
-        <option value="1920x1080" selected>1080p (Full HD)</option>
-      </select>
+<div class="container">
+  <h2>📹 مسجل الشاشة</h2>
 
-      <select id="fps">
-        <option value="30" selected>30 FPS</option>
-        <option value="60">60 FPS</option>
-      </select>
+  <div class="controls">
+    <select id="resolution">
+      <option value="1280x720">720p (HD)</option>
+      <option value="1920x1080" selected>1080p (Full HD)</option>
+    </select>
 
-      <label>
-        <input type="checkbox" id="withMic"> 🎤 تسجيل مع المايك
-      </label>
+    <select id="fps">
+      <option value="30" selected>30 FPS</option>
+      <option value="60">60 FPS</option>
+    </select>
 
-      <button id="startBtn">▶️ بدء التسجيل</button>
-      <button id="stopBtn" disabled>⏹️ إيقاف التسجيل</button>
-    </div>
+    <label>
+      <input type="checkbox" id="withMic"> 🎤 تسجيل مع المايك
+    </label>
 
-    <video id="preview" controls autoplay muted></video>
+    <button id="startBtn">▶️ بدء التسجيل</button>
+    <button id="stopBtn" disabled>⏹️ إيقاف التسجيل</button>
   </div>
 
-  <script>
-    let mediaRecorder;
-    let recordedChunks = [];
-    let finalStream;
+  <video id="preview" controls autoplay muted></video>
+</div>
 
-    async function startRecording() {
-      const [w, h] = document.getElementById("resolution").value.split("x").map(Number);
-      const fps = parseInt(document.getElementById("fps").value);
-      const withMic = document.getElementById("withMic").checked;
+<script>
+let mediaRecorder;
+let recordedChunks = [];
+let finalStream;
+let displayStream;
+let micStream;
 
-      try {
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: w, height: h, frameRate: fps },
-          audio: false // لا نأخذ صوت الشاشة هنا
-        });
+async function startRecording() {
+  const [w, h] = document.getElementById("resolution").value.split("x").map(Number);
+  const fps = parseInt(document.getElementById("fps").value);
+  const withMic = document.getElementById("withMic").checked;
 
-        if (withMic) {
-          const micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-          finalStream = new MediaStream([...displayStream.getVideoTracks(), ...micStream.getAudioTracks()]);
-        } else {
-          finalStream = displayStream;
-        }
+  try {
+    displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: w, height: h, frameRate: fps },
+      audio: true // بعض المتصفحات تدعم صوت النظام
+    });
 
-        document.getElementById("preview").srcObject = finalStream;
-
-        mediaRecorder = new MediaRecorder(finalStream, {
-          mimeType: 'video/webm;codecs=vp8,opus',
-          videoBitsPerSecond: 8000000,
-          audioBitsPerSecond: 256000
-        });
-
-        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-        mediaRecorder.onstop = saveRecording;
-
-        displayStream.getVideoTracks().forEach(track => {
-          track.addEventListener("ended", stopRecording);
-        });
-
-        mediaRecorder.start();
-        document.getElementById("startBtn").disabled = true;
-        document.getElementById("stopBtn").disabled = false;
-
-      } catch (err) {
-        alert("فشل البدء: " + err.message);
-      }
+    if (withMic) {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      finalStream = new MediaStream([
+        ...displayStream.getVideoTracks(),
+        ...micStream.getAudioTracks()
+      ]);
+    } else {
+      finalStream = displayStream;
     }
 
-    function stopRecording() {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
-      document.getElementById("startBtn").disabled = false;
-      document.getElementById("stopBtn").disabled = true;
+    document.getElementById("preview").srcObject = finalStream;
+
+    mediaRecorder = new MediaRecorder(finalStream, {
+      mimeType: "video/webm;codecs=vp9",
+      videoBitsPerSecond: 8000000,
+      audioBitsPerSecond: 256000
+    });
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = saveRecording;
+
+    // مراقبة إيقاف مشاركة الشاشة من المتصفح
+    displayStream.getVideoTracks()[0].addEventListener("ended", stopRecording);
+    
+    mediaRecorder.start();
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+  } catch (err) {
+    alert("فشل البدء: " + err.message);
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+
+  // إيقاف جميع التراكات
+  if (displayStream) displayStream.getTracks().forEach(track => track.stop());
+  if (micStream) micStream.getTracks().forEach(track => track.stop());
+
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+}
+
+async function saveRecording() {
+  if (recordedChunks.length === 0) return;
+  const blob = new Blob(recordedChunks, { type: "video/webm" });
+  recordedChunks = [];
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: "تسجيل_الشاشة.webm",
+        types: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    } catch (err) {
+      console.log("تم إلغاء الحفظ", err);
     }
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "تسجيل_الشاشة.webm";
+    a.click();
+  }
+}
 
-    async function saveRecording() {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
-      recordedChunks = [];
-
-      if (window.showSaveFilePicker) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: "تسجيل_الشاشة.webm",
-            types: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }]
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-        } catch (err) {
-          console.log("تم إلغاء الحفظ", err);
-        }
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "تسجيل_الشاشة.webm";
-        a.click();
-      }
-    }
-
-    document.getElementById("startBtn").onclick = startRecording;
-    document.getElementById("stopBtn").onclick = stopRecording;
-  </script>
+document.getElementById("startBtn").onclick = startRecording;
+document.getElementById("stopBtn").onclick = stopRecording;
+</script>
 </body>
 </html>
+
 
 
 

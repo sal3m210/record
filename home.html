@@ -2,9 +2,9 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>مسجل الشاشة Full HD</title>
+<title>مسجل الشاشة مع المايك</title>
 <style>
-body { font-family: Arial, sans-serif; background: #f0f2f5; display:flex; justify-content:center; align-items:center; height:100vh; }
+body { font-family: Arial; background:#f0f2f5; display:flex; justify-content:center; align-items:center; height:100vh; }
 .container { background:#fff; padding:20px 30px; border-radius:15px; box-shadow:0 5px 15px rgba(0,0,0,0.2); text-align:center; width:450px; }
 h2 { margin-bottom:20px; }
 .controls { display:grid; gap:15px; margin-bottom:20px; }
@@ -17,7 +17,7 @@ video { margin-top:15px; width:100%; border-radius:10px; border:1px solid #ddd; 
 </head>
 <body>
 <div class="container">
-<h2>📹 مسجل الشاشة</h2>
+<h2>📹 مسجل الشاشة مع المايك</h2>
 <div class="controls">
 <label><input type="checkbox" id="fullScreen"> تسجيل Full Screen بأعلى جودة</label>
 <label><input type="checkbox" id="withMic"> 🎤 تسجيل مع المايك</label>
@@ -28,80 +28,88 @@ video { margin-top:15px; width:100%; border-radius:10px; border:1px solid #ddd; 
 </div>
 
 <script>
-let mediaRecorder, recordedChunks = [], finalStream;
+let mediaRecorder, recordedChunks = [], finalStream, isRecording=false;
 
 async function startRecording() {
-  const fullScreen = document.getElementById("fullScreen").checked;
-  const withMic = document.getElementById("withMic").checked;
+    if(isRecording) return;
+    const fullScreen = document.getElementById("fullScreen").checked;
+    const withMic = document.getElementById("withMic").checked;
 
-  let constraints;
-  if(fullScreen){
-    constraints = { video: { width: screen.width, height: screen.height, frameRate:60 } };
-  } else {
-    constraints = { video: { width:1280, height:720, frameRate:30 } };
-  }
+    let constraints = fullScreen ? { video: { width: screen.width, height: screen.height, frameRate:60 } } :
+                                   { video: { width:1280, height:720, frameRate:30 } };
 
-  try {
-    const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
+    try {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
+        let tracks = [...displayStream.getVideoTracks()];
+        
+        if(withMic){
+            const micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+            // دمج الصوت باستخدام AudioContext لضمان تسجيل المايك
+            const audioContext = new AudioContext();
+            const destination = audioContext.createMediaStreamDestination();
+            const systemSource = audioContext.createMediaStreamSource(displayStream);
+            const micSource = audioContext.createMediaStreamSource(micStream);
+            systemSource.connect(destination);
+            micSource.connect(destination);
+            tracks.push(...destination.stream.getAudioTracks());
+        } else if(displayStream.getAudioTracks().length>0){
+            tracks.push(...displayStream.getAudioTracks());
+        }
 
-    if(withMic){
-      const micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-      finalStream = new MediaStream([...displayStream.getVideoTracks(), ...micStream.getAudioTracks()]);
-    } else {
-      finalStream = displayStream;
+        finalStream = new MediaStream(tracks);
+        document.getElementById("preview").srcObject = finalStream;
+
+        let mimeType = "video/mp4";
+        if(!MediaRecorder.isTypeSupported(mimeType)) mimeType="video/webm;codecs=vp9";
+
+        mediaRecorder = new MediaRecorder(finalStream, { mimeType:mimeType, videoBitsPerSecond:10000000, audioBitsPerSecond:320000 });
+        mediaRecorder.ondataavailable = e => { if(e.data.size>0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = saveRecording;
+
+        // التعامل مع إيقاف التسجيل عند إغلاق أي Track
+        finalStream.getTracks().forEach(track=>{
+            track.onended=()=>{ if(isRecording) stopRecording(); }
+        });
+
+        mediaRecorder.start();
+        isRecording=true;
+        document.getElementById("startBtn").disabled=true;
+        document.getElementById("stopBtn").disabled=false;
+
+    } catch(err){
+        alert("فشل البدء: "+err.message);
     }
-
-    document.getElementById("preview").srcObject = finalStream;
-
-    let mimeType = "video/mp4";
-    if(!MediaRecorder.isTypeSupported(mimeType)){
-      mimeType = "video/webm;codecs=vp9";
-    }
-
-    mediaRecorder = new MediaRecorder(finalStream, { mimeType: mimeType, videoBitsPerSecond:10000000, audioBitsPerSecond:320000 });
-    mediaRecorder.ondataavailable = e => { if(e.data.size>0) recordedChunks.push(e.data); };
-    mediaRecorder.onstop = saveRecording;
-
-    displayStream.getTracks().forEach(track => {
-      track.addEventListener("ended", stopRecording);
-      track.addEventListener("inactive", stopRecording);
-    });
-
-    mediaRecorder.start();
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("stopBtn").disabled = false;
-  } catch(err){
-    alert("فشل البدء: "+err.message);
-  }
 }
 
-function stopRecording(){
-  if(mediaRecorder && mediaRecorder.state!=="inactive") mediaRecorder.stop();
-  document.getElementById("startBtn").disabled = false;
-  document.getElementById("stopBtn").disabled = true;
+function stopRecording() {
+    if(!isRecording) return;
+    isRecording=false;
+    if(mediaRecorder && mediaRecorder.state!=="inactive") mediaRecorder.stop();
+    document.getElementById("startBtn").disabled=false;
+    document.getElementById("stopBtn").disabled=true;
 }
 
 async function saveRecording(){
-  const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
-  recordedChunks = [];
-
-  if(window.showSaveFilePicker){
-    try{
-      const handle = await window.showSaveFilePicker({
-        suggestedName:"تسجيل_الشاشة.mp4",
-        types:[{description:"Video File", accept:{[mediaRecorder.mimeType]:[".mp4"]}}]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-    }catch(err){ console.log("تم الإلغاء", err); }
-  } else {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "تسجيل_الشاشة.mp4";
-    a.click();
-  }
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    recordedChunks=[];
+    
+    if(window.showSaveFilePicker){
+        try{
+            const handle = await window.showSaveFilePicker({
+                suggestedName:"تسجيل_الشاشة.mp4",
+                types:[{description:"Video File", accept:{[mediaRecorder.mimeType]:[".mp4"]}}]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+        }catch(err){ console.log("تم الإلغاء", err); }
+    } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download="تسجيل_الشاشة.mp4";
+        a.click();
+    }
 }
 
 document.getElementById("startBtn").onclick = startRecording;
@@ -109,6 +117,7 @@ document.getElementById("stopBtn").onclick = stopRecording;
 </script>
 </body>
 </html>
+
 
 
 

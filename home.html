@@ -18,7 +18,7 @@
       border-radius: 15px;
       box-shadow: 0 5px 15px rgba(0,0,0,0.2);
       text-align: center;
-      width: 400px;
+      width: 420px;
     }
     h2 { margin-bottom: 20px; }
     .controls { display: grid; gap: 15px; margin-bottom: 20px; }
@@ -66,42 +66,35 @@
   <script>
     let mediaRecorder;
     let recordedChunks = [];
+    let finalStream;
 
     document.getElementById("startBtn").onclick = async () => {
       const [w, h] = document.getElementById("resolution").value.split("x").map(Number);
       const fps = parseInt(document.getElementById("fps").value);
       const withMic = document.getElementById("withMic").checked;
 
-      // 🎥 شاشة بدون صوت (بعض المتصفحات ما تسمح بصوت النظام)
+      // 🎥 شاشة
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: { width: w, height: h, frameRate: fps }
       });
 
-      let finalStream = displayStream;
+      // ⛔ نسمع لحدث الإيقاف من زر المتصفح العائم
+      displayStream.getVideoTracks()[0].addEventListener("ended", () => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+      });
 
       if (withMic) {
-        // 🎤 صوت المايك
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        // AudioContext للدمج
-        const audioContext = new AudioContext();
-        const destination = audioContext.createMediaStreamDestination();
-
-        // ربط صوت المايك
-        const micAudio = audioContext.createMediaStreamSource(micStream);
-        micAudio.connect(destination);
-
-        // ربط صوت الشاشة (لو فيه صوت متاح)
-        if (displayStream.getAudioTracks().length > 0) {
-          const displayAudio = audioContext.createMediaStreamSource(displayStream);
-          displayAudio.connect(destination);
-        }
-
-        // فيديو + صوت مدموج
+        // إنشاء ستريم نهائي يحتوي فيديو الشاشة + صوت المايك
         finalStream = new MediaStream([
           ...displayStream.getVideoTracks(),
-          ...destination.stream.getAudioTracks()
+          ...micStream.getAudioTracks()
         ]);
+      } else {
+        finalStream = displayStream;
       }
 
       document.getElementById("preview").srcObject = finalStream;
@@ -109,7 +102,7 @@
       mediaRecorder = new MediaRecorder(finalStream, {
         mimeType: "video/webm;codecs=vp9",
         videoBitsPerSecond: 8000000,
-        audioBitsPerSecond: 320000  // صوت بجودة عالية
+        audioBitsPerSecond: 320000
       });
 
       mediaRecorder.ondataavailable = e => {
@@ -148,13 +141,16 @@
     };
 
     document.getElementById("stopBtn").onclick = () => {
-      mediaRecorder.stop();
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
       document.getElementById("startBtn").disabled = false;
       document.getElementById("stopBtn").disabled = true;
     };
   </script>
 </body>
 </html>
+
 
 
 

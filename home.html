@@ -44,7 +44,6 @@
       <select id="resolution">
         <option value="1280x720">720p (HD)</option>
         <option value="1920x1080" selected>1080p (Full HD)</option>
-        <option value="3840x2160">2160p (4K)</option>
       </select>
 
       <select id="fps">
@@ -68,88 +67,97 @@
     let recordedChunks = [];
     let finalStream;
 
-    document.getElementById("startBtn").onclick = async () => {
+    async function startRecording() {
       const [w, h] = document.getElementById("resolution").value.split("x").map(Number);
       const fps = parseInt(document.getElementById("fps").value);
       const withMic = document.getElementById("withMic").checked;
 
-      // 🎥 شاشة
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: w, height: h, frameRate: fps }
-      });
+      try {
+        // 🎥 التقاط الشاشة
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: w, height: h, frameRate: fps }
+        });
 
-      // ⛔ نسمع لحدث الإيقاف من زر المتصفح العائم
-      displayStream.getVideoTracks()[0].addEventListener("ended", () => {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-          mediaRecorder.stop();
-        }
-      });
-
-      if (withMic) {
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-        // إنشاء ستريم نهائي يحتوي فيديو الشاشة + صوت المايك
-        finalStream = new MediaStream([
-          ...displayStream.getVideoTracks(),
-          ...micStream.getAudioTracks()
-        ]);
-      } else {
-        finalStream = displayStream;
-      }
-
-      document.getElementById("preview").srcObject = finalStream;
-
-      mediaRecorder = new MediaRecorder(finalStream, {
-        mimeType: "video/webm;codecs=vp9",
-        videoBitsPerSecond: 8000000,
-        audioBitsPerSecond: 320000
-      });
-
-      mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(recordedChunks, { type: "video/webm" });
-
-        if (window.showSaveFilePicker) {
-          try {
-            const handle = await window.showSaveFilePicker({
-              suggestedName: "تسجيل_الشاشة.webm",
-              types: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }]
-            });
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-          } catch (err) {
-            console.log("تم إلغاء الحفظ", err);
-          }
+        // 🎤 إضافة المايك (اختياري)
+        if (withMic) {
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          finalStream = new MediaStream([
+            ...displayStream.getVideoTracks(),
+            ...micStream.getAudioTracks()
+          ]);
         } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "تسجيل_الشاشة.webm";
-          a.click();
+          finalStream = displayStream;
         }
 
-        recordedChunks = [];
-      };
+        document.getElementById("preview").srcObject = finalStream;
 
-      mediaRecorder.start();
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = false;
-    };
+        // 🟢 إنشاء MediaRecorder
+        mediaRecorder = new MediaRecorder(finalStream, {
+          mimeType: "video/webm;codecs=vp9",
+          videoBitsPerSecond: 8000000,
+          audioBitsPerSecond: 320000
+        });
 
-    document.getElementById("stopBtn").onclick = () => {
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = saveRecording;
+
+        // ⛔ لما المستخدم يوقف من الاختصار/الزر العائم
+        displayStream.getTracks().forEach(track => {
+          track.addEventListener("ended", stopRecording);
+          track.addEventListener("inactive", stopRecording);
+        });
+
+        mediaRecorder.start();
+        document.getElementById("startBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
+      } catch (err) {
+        alert("فشل البدء: " + err.message);
+      }
+    }
+
+    function stopRecording() {
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
         mediaRecorder.stop();
       }
       document.getElementById("startBtn").disabled = false;
       document.getElementById("stopBtn").disabled = true;
-    };
+    }
+
+    async function saveRecording() {
+      const blob = new Blob(recordedChunks, { type: "video/webm" });
+      recordedChunks = [];
+
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: "تسجيل_الشاشة.webm",
+            types: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (err) {
+          console.log("تم إلغاء الحفظ", err);
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "تسجيل_الشاشة.webm";
+        a.click();
+      }
+    }
+
+    document.getElementById("startBtn").onclick = startRecording;
+    document.getElementById("stopBtn").onclick = stopRecording;
   </script>
 </body>
 </html>
+
+
 
 
 

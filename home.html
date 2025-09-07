@@ -4,77 +4,124 @@
   <meta charset="UTF-8">
   <title>مسجل الشاشة</title>
   <style>
-    body { text-align: center; font-family: Arial; margin-top: 30px; }
-    select, button, label { padding: 10px; margin: 10px; font-size: 16px; }
-    video { margin-top: 20px; max-width: 80%; border: 1px solid #000; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      background: #fff;
+      padding: 20px 30px;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+      text-align: center;
+      width: 400px;
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    .controls {
+      display: grid;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    select, button, label {
+      padding: 10px;
+      font-size: 15px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      width: 100%;
+    }
+    button {
+      cursor: pointer;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      transition: 0.3s;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    #stopBtn {
+      background: #dc3545;
+    }
+    #stopBtn:hover {
+      background: #a71d2a;
+    }
+    video {
+      margin-top: 15px;
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+    }
   </style>
 </head>
 <body>
-  <h2>📹 مسجل الشاشة (بسيط مثل OBS)</h2>
+  <div class="container">
+    <h2>📹 مسجل الشاشة</h2>
 
-  <label>الدقة:</label>
-  <select id="resolution">
-    <option value="1280x720">720p (HD)</option>
-    <option value="1920x1080" selected>1080p (Full HD)</option>
-    <option value="3840x2160">2160p (4K)</option>
-  </select>
+    <div class="controls">
+      <select id="resolution">
+        <option value="1280x720">720p (HD)</option>
+        <option value="1920x1080" selected>1080p (Full HD)</option>
+        <option value="3840x2160">2160p (4K)</option>
+      </select>
 
-  <label>الفريمات:</label>
-  <select id="fps">
-    <option value="30" selected>30 FPS</option>
-    <option value="60">60 FPS</option>
-  </select>
+      <select id="fps">
+        <option value="30" selected>30 FPS</option>
+        <option value="60">60 FPS</option>
+      </select>
 
-  <br>
+      <label>
+        <input type="checkbox" id="withMic"> 🎤 تسجيل مع المايك
+      </label>
 
-  <label>
-    <input type="checkbox" id="withMic"> 🎤 تسجيل مع المايكروفون
-  </label>
+      <button id="startBtn">▶️ بدء التسجيل</button>
+      <button id="stopBtn" disabled>⏹️ إيقاف التسجيل</button>
+    </div>
 
-  <br>
-
-  <button id="startBtn">بدء التسجيل</button>
-  <button id="stopBtn" disabled>إيقاف التسجيل</button>
-
-  <br><br>
-  <video id="preview" controls autoplay></video>
+    <video id="preview" controls autoplay muted></video>
+  </div>
 
   <script>
     let mediaRecorder;
     let recordedChunks = [];
 
     document.getElementById("startBtn").onclick = async () => {
-      const resolution = document.getElementById("resolution").value.split("x");
+      const [w, h] = document.getElementById("resolution").value.split("x").map(Number);
       const fps = parseInt(document.getElementById("fps").value);
       const withMic = document.getElementById("withMic").checked;
 
-      // 🎥 تسجيل الشاشة
+      // 🎥 تسجيل الشاشة (فيديو + صوت النظام لو متاح)
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: parseInt(resolution[0]),
-          height: parseInt(resolution[1]),
-          frameRate: fps
-        },
-        audio: true // صوت النظام (إن وُجد)
+        video: { width: w, height: h, frameRate: fps },
+        audio: true
       });
 
-      // 🎤 إضافة المايكروفون إذا تم اختياره
       let finalStream = displayStream;
+
+      // 🎤 لو المايك مطلوب → نضيفه
       if (withMic) {
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const audioContext = new AudioContext();
-        const dest = audioContext.createMediaStreamDestination();
+        const destination = audioContext.createMediaStreamDestination();
 
-        // مزج صوت الشاشة + المايك
-        const displayAudio = audioContext.createMediaStreamSource(displayStream);
+        // ربط صوت الشاشة (إن وجد)
+        if (displayStream.getAudioTracks().length > 0) {
+          const displayAudio = audioContext.createMediaStreamSource(displayStream);
+          displayAudio.connect(destination);
+        }
+
+        // ربط صوت المايك
         const micAudio = audioContext.createMediaStreamSource(micStream);
-
-        displayAudio.connect(dest);
-        micAudio.connect(dest);
+        micAudio.connect(destination);
 
         finalStream = new MediaStream([
           ...displayStream.getVideoTracks(),
-          ...dest.stream.getAudioTracks()
+          ...destination.stream.getAudioTracks()
         ]);
       }
 
@@ -83,8 +130,8 @@
       // 🏆 جودة عالية للفيديو + الصوت
       mediaRecorder = new MediaRecorder(finalStream, {
         mimeType: "video/webm;codecs=vp9",
-        videoBitsPerSecond: 8000000,   // 8 Mbps
-        audioBitsPerSecond: 256000     // صوت عالي الجودة (256kbps)
+        videoBitsPerSecond: 8000000,   // 8 Mbps للفيديو
+        audioBitsPerSecond: 320000     // 320kbps للصوت (جودة ممتازة)
       });
 
       mediaRecorder.ondataavailable = e => {
@@ -94,7 +141,7 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedChunks, { type: "video/webm" });
 
-        // يسألك وين تحفظ الملف
+        // 📝 حفظ الملف (Save As)
         if (window.showSaveFilePicker) {
           try {
             const handle = await window.showSaveFilePicker({
@@ -134,5 +181,7 @@
   </script>
 </body>
 </html>
+
+
 
 
